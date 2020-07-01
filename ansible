@@ -1,0 +1,118 @@
+#各种CPU架构安装ansible
+##适应场景
+# 各种cpu架构安装ansible，以及使用
+标签（空格分隔）： ansible
+
+---
+
+#适应场景
+    在实际生产环境中，服务器往往是不能访问互联网，以及服务器里面没有ansible的yum源，如果简单的下载ansible源码安装，会碰到缺少各种依赖包的问题，因此，推荐制作yum源，然后使用yum安装ansible。
+当然其他系统的另当别论，例如debian，就需要寻找其他方法安装了。
+#使用环境
+需要一台可以通互联网的主机A,必须相同cpu架构的主机
+   
+
+    OS：银河v10 使用包的主机必须要相同cpu架构
+    下载包目录：/data/ansible_packages
+模拟生产环境不通网的主机，或是没有yum源的主机
+
+    OS：银河v10 使用包的主机必须要相同cpu架构
+    下载包目录：/data/ansible_packages
+#工具准备
+yumdownloader命令在yum-utils软件包中，首先安装yum-utils
+yum -y install yum-utils
+获取ansible依赖包和安装包
+安装epel源
+对于服务器中的官方yum源中没有ansible安装包，这就需要先安装支持第三方的yum仓库组件，这里选择安装epel源；执行下边命令从互联网安装epel源：
+
+    yum install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+    #获取ansible依赖包和安装包
+    yumdownloader --resolve --destdir /data/ansible_packages ansible
+    #获取createrepo的依赖包和安装包
+    yumdownloader --resolve --destdir /data/ansible_packages createrepo
+
+打包/data/ansible_packages目录下的所有包
+
+`cd /data/ansible_packages/`
+`tar -zcvf ansible.tar.gz ansible_packages` #打包之后，以后可以方便其他机器进行安装，到时候scp进行传送就可以
+
+制作离线源
+
+    createrepo /data/ansible_packages
+
+新增yum文件
+
+    vi /etc/yum.repos.d/ansible.repo
+    [ansible]
+    name=ansible
+    baseurl=file:///data/ansible_packages
+    gpgcheck=0
+    enabled=1
+
+安装ansible
+
+    yum -y install ansible
+    ansible --version
+#2.debian系统的ansible可按以下方法安装
+echo "deb http://ppa.launchpad.net/ansible/ansible/ubuntu trusty main" /etc/apt/sources.list 
+ #由于没有证书认证，所以我们要添加证书
+`apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 93C4A3FD7BB9C367
+apt update
+apt install ansible`
+安装完之后我们要进行分发公钥,不使用密钥也可以，但是使用明文密码会不安全
+`ssh-keygen
+cat id_rsa.pub > authorized.keys 
+ssh-copy-id 192.168.14.205`
+
+
+##hosts修改
+`vi /etc/ansible/hosts #在最后一行添加模块和主机名，以及ip
+[模块名] 
+agnet1 ansible_ssh_host=192.168.14.205
+agent2 ansible_ssh_host=192.168.14.40`
+
+##进行测试
+`ansible agent -m ping  #写上模块名的话，就会执行模块里面的所有主机，单独写出来就会单独执行。
+ansible agent1 -m ping `
+##编写ansible-playbook,定制化roles
+
+   
+
+ 
+
+       cat myroles/agent.yaml
+            ---
+            - hosts: all #执行的主机范围
+              gather_facts: True #开启系统内置变量
+              roles: 启用roles原型模组
+              - agent #执行agent原型模组
+          
+        cat task/main.yaml
+        ---
+        - name: test_ping
+          ping:
+        - name: sh
+          script: init.sh
+        - name: copy
+          copy: src=csphere-agent3.0.tar.gz dest=/root/ backup=yes
+        - name: tar
+          script: tar.sh
+          register: print_result #将之前命令的输出结果保存在变量print_result里   
+        - debug: var=print_result #将变量的值作为debug输出出来。
+
+
+    ```tree #查看目录结构
+    .
+    ├── agent.retry
+    ├── agent.yaml #入口配置文件
+    └── roles  #playbook的原型配置目录
+        └── agent  #相关模组配置目录
+            ├── files #copy模块和script模块的参数src默认会从这个文件夹查找
+            │   ├── csphere-agent3.0.tar.gz 
+            │   ├── init.sh
+            │   └── tar.sh
+            ├── handlers #用来存放notify的
+            ├── tasks #用来存放ansible模块任务的
+            │   └── main.yaml
+            ├── templates #用来存放j2的
+            └── vars #用来存放变量的```
